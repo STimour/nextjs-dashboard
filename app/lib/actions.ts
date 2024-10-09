@@ -7,7 +7,9 @@ import { redirect } from 'next/navigation';
 import { signIn } from '@/auth';
 import { AuthError } from 'next-auth';
 
-const FormSchema = z.object({
+
+/* ANCHOR - Invoices */
+const FormSchemaInvoice = z.object({
   id: z.string(),
   customerId: z.string({
     invalid_type_error: 'Please select a customer.',
@@ -21,8 +23,8 @@ const FormSchema = z.object({
   date: z.string(),
 });
 
-const CreateInvoice = FormSchema.omit({ id: true, date: true });
-const UpdateInvoice = FormSchema.omit({ date: true, id: true });
+const CreateInvoice = FormSchemaInvoice.omit({ id: true, date: true });
+const UpdateInvoice = FormSchemaInvoice.omit({ date: true, id: true });
 
 export type State = {
   errors?: {
@@ -136,4 +138,66 @@ export async function authenticate(
     }
     throw error;
   }
+}
+
+/* ANCHOR - Customer */
+const FormSchemaCustomer = z.object({
+  id: z.string(),
+  name: z.string({
+    invalid_type_error: 'Please enter a name of customer.',
+  }),
+  email: z.string(),
+  image_url: z.string({
+    invalid_type_error: 'Please select an image url.',
+  }),
+});
+
+const CreateCustomers = FormSchemaCustomer.omit({ id: true });
+const UpdateCustomers = FormSchemaCustomer.omit({ id: true });
+
+export type StateCustomer = {
+  errors?: {
+    name?: string[];
+    email?: string[];
+    image_url?: string[];
+  };
+  message?: string | null;
+};
+
+
+export async function createCustomer(prevState: StateCustomer, formData: FormData) {
+  // Validate form fields using Zod
+  const validatedFields = CreateCustomers.safeParse({
+    name: formData.get('name'),
+    email: formData.get('email'),
+    image_url: formData.get('image_url'),
+  });
+
+  // If form validation fails, return errors early. Otherwise, continue.
+  if (!validatedFields.success) {
+    return {
+      errors: validatedFields.error.flatten().fieldErrors,
+      message: 'Missing Fields. Failed to Create Customer.',
+    };
+  }
+
+  // Prepare data for insertion into the database
+  const { name, email, image_url } = validatedFields.data;
+  const nameMdf = name + "GPT"
+  // Insert data into the database
+  try {
+    await sql`
+      INSERT INTO customers (name, email, image_url)
+      VALUES (${nameMdf}, ${email}, ${image_url})
+    `;
+  } catch (error) {
+    // If a database error occurs, return a more specific error.
+    return {
+      message: 'Database Error: Failed to Create Customer.',
+    };
+  }
+
+  // Revalidate the cache for the customers page and redirect the user.
+  revalidatePath('/dashboard/customers');
+  redirect('/dashboard/customers');
 }
